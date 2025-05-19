@@ -100,6 +100,9 @@ async function helpCommand(sock, chatId, channelLink) {
 ║ ➤ .compliment @user
 ║ ➤ .insult @user
 ║ ➤ .flirt 
+║ ➤ .shayari
+║ ➤ .goodnight
+║ ➤ .roseday
 ║ ➤ .character @user
 ║ ➤ .wasted @user
 ║ ➤ .ship @user
