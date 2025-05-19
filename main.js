@@ -93,6 +93,7 @@ const { addCommandReaction, handleAreactCommand } = require('./lib/reactions');
 const { goodnightCommand } = require('./commands/goodnight');
 const { shayariCommand } = require('./commands/shayari');
 const { rosedayCommand } = require('./commands/roseday');
+const imagineCommand = require('./commands/imagine');
 
 
 // Global settings
@@ -753,6 +754,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.roseday':
                 await rosedayCommand(sock, chatId);
+                break;
+            case userMessage.startsWith('.imagine') || userMessage.startsWith('.flux') || userMessage.startsWith('.dalle'):
+                await imagineCommand(sock, chatId, message);
                 break;
             default:
                 if (isGroup) {
