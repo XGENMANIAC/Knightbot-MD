@@ -53,219 +53,164 @@ async function songCommand(sock, chatId, message) {
                 }
             }
 
-            // Use new siputzx endpoint and include thumbnail
-            const apiUrl = `https://api.siputzx.my.id/api/dl/youtube/mp3?url=${encodeURIComponent(urlYt)}`;
-            const siputzxRes = await fetch(apiUrl, { headers: { 'accept': '*/*' } });
-            const siputzxData = await siputzxRes.json();
-            let downloadLink = null;
-            if (siputzxData && siputzxData.status && siputzxData.data) {
-                downloadLink = siputzxData.data;
+            // Try multiple APIs with fallback
+            const apis = [
+                {
+                    name: 'xploader',
+                    url: `https://xploader-api.vercel.app/ytmp3?url=${encodeURIComponent(urlYt)}`,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json'
+                    }
+                },
+                {
+                    name: 'davidcyril',
+                    url: `https://apis.davidcyriltech.my.id/youtube/mp3?url=${encodeURIComponent(urlYt)}`,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json'
+                    }
+                },
+                {
+                    name: 'ryzendesu',
+                    url: `https://api.ryzendesu.vip/api/downloader/ytmp3?url=${encodeURIComponent(urlYt)}`,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json'
+                    }
+                },
+                {
+                    name: 'dreaded',
+                    url: `https://api.dreaded.site/api/ytdl/audio?url=${encodeURIComponent(urlYt)}`,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json'
+                    }
+                },
+                {
+                    name: 'siputzx',
+                    url: `https://api.siputzx.my.id/api/dl/youtube/mp3?url=${encodeURIComponent(urlYt)}`,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json'
+                    }
+                }
+            ];
+
+            let downloadUrl = null;
+            let workingApi = null;
+
+            for (const api of apis) {
+                try {
+                    
+                    // Add delay between API calls to avoid rate limiting
+                    if (workingApi === null && api.name !== 'xploader') {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                    
+                    const response = await fetch(api.url, { headers: api.headers });
+                    
+                    if (!response.ok) {
+                        continue;
+                    }
+                    
+                    const responseText = await response.text();
+                    
+                    // Check if response is HTML (error page)
+                    if (responseText.trim().startsWith('<!doctype') || responseText.trim().startsWith('<html')) {
+                        continue;
+                    }
+                    
+                    let data;
+                    try {
+                        data = JSON.parse(responseText);
+                    } catch (e) {
+                        continue;
+                    }
+                    
+                    // Check different API response formats
+                    if (data && (data.status === 200 || data.success || data.status === true)) {
+                        let videoUrl = null;
+                        
+                        // Handle different response structures
+                        if (data.result && data.result.downloadUrl) {
+                            videoUrl = data.result.downloadUrl;
+                        } else if (data.result && data.result.download && data.result.download.url) {
+                            videoUrl = data.result.download.url;
+                        } else if (data.url) {
+                            videoUrl = data.url;
+                        } else if (data.data) {
+                            videoUrl = data.data;
+                        }
+                        
+                        if (videoUrl) {
+                            downloadUrl = videoUrl;
+                            workingApi = api.name;
+                            break;
+                        }
+                    }
+                } catch (error) {
+                    continue;
+                }
             }
-            if (downloadLink) {
-                const response = await fetch(downloadLink);
-                if (!response.ok) {
-                    await sock.sendMessage(chatId, { text: 'Failed to download the song file from the server.' }, { quoted: message });
-                    return;
-                }
-                const buffer = await response.buffer();
-                if (!buffer || buffer.length < 1024) {
-                    await sock.sendMessage(chatId, { text: 'Downloaded file is empty or too small.' }, { quoted: message });
-                    return;
-                }
-                fs.writeFileSync(tempM4a, buffer);
-                await execPromise(`ffmpeg -i "${tempM4a}" -vn -acodec libmp3lame -ac 2 -ab 128k -ar 44100 "${tempFile}"`);
-                const stats = fs.statSync(tempFile);
-                if (stats.size < 1024) {
-                    throw new Error('Conversion failed');
-                }
+
+            if (!downloadUrl || !workingApi) {
                 await sock.sendMessage(chatId, {
-                    audio: { url: tempFile },
-                    mimetype: "audio/mpeg",
-                    fileName: `${video.title}.mp3`,
-                    ptt: false
+                    text: 'Sorry, all song download APIs are currently unavailable. Please try again later.'
                 }, { quoted: message });
-                setTimeout(() => {
-                    try {
-                        if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
-                        if (fs.existsSync(tempM4a)) fs.unlinkSync(tempM4a);
-                    } catch {}
-                }, 5000);
                 return;
-            } else {
-                // Fallback to vreden API
-                try {
-                    const vredenUrl = `https://api.vreden.my.id/api/dl/ytmp3?url=${encodeURIComponent(urlYt)}`;
-                    const vredenRes = await fetch(vredenUrl, {
-                        headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                            'Accept': 'application/json'
-                        }
-                    });
-                    let vredenData;
-                    if (!vredenRes.ok) {
-                        await sock.sendMessage(chatId, {
-                            text: 'Sorry, this song could not be downloaded (fallback API error). Please try another song or try again later.'
-                        }, { quoted: message });
-                        return;
-                    }
-                    const contentType = vredenRes.headers.get('content-type');
-                    if (!contentType || !contentType.includes('application/json')) {
-                        const errText = await vredenRes.text();
-                        await sock.sendMessage(chatId, {
-                            text: 'Sorry, this song could not be downloaded (fallback API returned invalid content). Please try another song or try again later.'
-                        }, { quoted: message });
-                        return;
-                    }
-                    try {
-                        vredenData = await vredenRes.json();
-                    } catch (jsonErr) {
-                        await sock.sendMessage(chatId, {
-                            text: 'Sorry, this song could not be downloaded (fallback API invalid response). Please try another song or try again later.'
-                        }, { quoted: message });
-                        return;
-                    }
-                    if (
-                        vredenData &&
-                        vredenData.status === 200 &&
-                        vredenData.result &&
-                        vredenData.result.status === true &&
-                        vredenData.result.download &&
-                        vredenData.result.download.status === true &&
-                        vredenData.result.download.url
-                    ) {
-                        const vredenDownloadUrl = vredenData.result.download.url;
-                        const vredenFilename = vredenData.result.download.filename || `${video.title}.mp3`;
-                        const response = await fetch(vredenDownloadUrl);
-                        if (!response.ok) {
-                            await sock.sendMessage(chatId, { text: 'Failed to download the song file from the fallback server.' }, { quoted: message });
-                            return;
-                        }
-                        const buffer = await response.buffer();
-                        if (!buffer || buffer.length < 1024) {
-                            await sock.sendMessage(chatId, { text: 'Downloaded file is empty or too small (fallback).' }, { quoted: message });
-                            return;
-                        }
-                        fs.writeFileSync(tempM4a, buffer);
-                        await execPromise(`ffmpeg -i "${tempM4a}" -vn -acodec libmp3lame -ac 2 -ab 128k -ar 44100 "${tempFile}"`);
-                        const stats = fs.statSync(tempFile);
-                        if (stats.size < 1024) {
-                            throw new Error('Conversion failed (fallback)');
-                        }
-                        await sock.sendMessage(chatId, {
-                            audio: { url: tempFile },
-                            mimetype: "audio/mpeg",
-                            fileName: vredenFilename,
-                            ptt: false
-                        }, { quoted: message });
-                        setTimeout(() => {
-                            try {
-                                if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
-                                if (fs.existsSync(tempM4a)) fs.unlinkSync(tempM4a);
-                            } catch {}
-                        }, 5000);
-                        return;
-                    } else {
-                        await sock.sendMessage(chatId, {
-                            text: 'Sorry, this song could not be downloaded. Please try another song or try again later.'
-                        }, { quoted: message });
-                        return;
-                    }
-                } catch (vredenErr) {
-                    await sock.sendMessage(chatId, {
-                        text: 'Sorry, this song could not be downloaded. Please try another song or try again later.'
-                    }, { quoted: message });
-                    return;
-                }
             }
-        } catch (e1) {
-            try {
-                // Try zenkey API as fallback
-                const zenkeyRes = await fetch(`https://api.zenkey.my.id/api/download/ytmp3?apikey=zenkey&url=${encodeURIComponent(urlYt)}`);
-                const zenkeyData = await zenkeyRes.json();
-                
-                if (zenkeyData && zenkeyData.result && zenkeyData.result.downloadUrl) {
-                    // Download the file first
-                    const response = await fetch(zenkeyData.result.downloadUrl);
-                    const buffer = await response.buffer();
-                    
-                    // Write to temp file
-                    fs.writeFileSync(tempM4a, buffer);
-                    
-                    // Convert to MP3 with proper WhatsApp-compatible settings
-                    await execPromise(`ffmpeg -i "${tempM4a}" -vn -acodec libmp3lame -ac 2 -ab 128k -ar 44100 "${tempFile}"`);
-                    
-                    // Check file size
-                    const stats = fs.statSync(tempFile);
-                    if (stats.size < 1024) {
-                        throw new Error('Conversion failed');
-                    }
 
-                    await sock.sendMessage(chatId, {
-                        audio: { url: tempFile },
-                        mimetype: "audio/mpeg",
-                        fileName: `${video.title}.mp3`,
-                        ptt: false
-                    }, { quoted: message });
-
-                    // Clean up temp files after a delay to ensure WhatsApp has read the file
-                    setTimeout(() => {
-                        try {
-                            if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
-                            if (fs.existsSync(tempM4a)) fs.unlinkSync(tempM4a);
-                        } catch (cleanupErr) {
-                        }
-                    }, 5000);
-                    return;
-                }
-            } catch (e2) {
-                try {
-                    // Try axeel API as last resort
-                    const axeelRes = await fetch(`https://api.axeel.my.id/api/download/ytmp3?apikey=axeel&url=${encodeURIComponent(urlYt)}`);
-                    const axeelData = await axeelRes.json();
-                    
-                    if (axeelData && axeelData.result && axeelData.result.downloadUrl) {
-                        // Download the file first
-                        const response = await fetch(axeelData.result.downloadUrl);
-                        const buffer = await response.buffer();
-                        
-                        // Write to temp file
-                        fs.writeFileSync(tempM4a, buffer);
-                        
-                        // Convert to MP3 with proper WhatsApp-compatible settings
-                        await execPromise(`ffmpeg -i "${tempM4a}" -vn -acodec libmp3lame -ac 2 -ab 128k -ar 44100 "${tempFile}"`);
-                        
-                        // Check file size
-                        const stats = fs.statSync(tempFile);
-                        if (stats.size < 1024) {
-                            throw new Error('Conversion failed');
-                        }
-
-                        await sock.sendMessage(chatId, {
-                            audio: { url: tempFile },
-                            mimetype: "audio/mpeg",
-                            fileName: `${video.title}.mp3`,
-                            ptt: false
-                        }, { quoted: message });
-
-                        // Clean up temp files after a delay to ensure WhatsApp has read the file
-                        setTimeout(() => {
-                            try {
-                                if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
-                                if (fs.existsSync(tempM4a)) fs.unlinkSync(tempM4a);
-                            } catch (cleanupErr) {
-                            }
-                        }, 5000);
-                        return;
-                    }
-                } catch (e3) {
-                    throw new Error("All download methods failed");
-                }
+            // Download and convert the audio
+            const response = await fetch(downloadUrl);
+            if (!response.ok) {
+                await sock.sendMessage(chatId, { text: 'Failed to download the song file from the server.' }, { quoted: message });
+                return;
             }
+            
+            const buffer = await response.buffer();
+            if (!buffer || buffer.length < 1024) {
+                await sock.sendMessage(chatId, { text: 'Downloaded file is empty or too small.' }, { quoted: message });
+                return;
+            }
+            
+            fs.writeFileSync(tempM4a, buffer);
+            
+            // Convert to MP3 with proper WhatsApp-compatible settings
+            await execPromise(`ffmpeg -i "${tempM4a}" -vn -acodec libmp3lame -ac 2 -ab 128k -ar 44100 "${tempFile}"`);
+            
+            const stats = fs.statSync(tempFile);
+            if (stats.size < 1024) {
+                throw new Error('Conversion failed');
+            }
+            
+            await sock.sendMessage(chatId, {
+                audio: { url: tempFile },
+                mimetype: "audio/mpeg",
+                fileName: `${video.title}.mp3`,
+                ptt: false
+            }, { quoted: message });
+            
+            // Clean up temp files
+            setTimeout(() => {
+                try {
+                    if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+                    if (fs.existsSync(tempM4a)) fs.unlinkSync(tempM4a);
+                } catch {}
+            }, 5000);
+            
+            return;
+        } catch (error) {
+            console.log('🎵 Song Command Error:', error.message);
+            await sock.sendMessage(chatId, { 
+                text: "Download failed. Please try again later."
+            }, { quoted: message });
         }
     } catch (error) {
+        console.log('🎵 Song Command Error:', error.message);
         await sock.sendMessage(chatId, { 
             text: "Download failed. Please try again later."
-        });
+        }, { quoted: message });
     }
 }
 
