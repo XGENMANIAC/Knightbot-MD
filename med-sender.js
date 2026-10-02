@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const fs = require('fs');
 const pino = require('pino');
+const qrcode = require('qrcode-terminal');
 const {
   default: makeWASocket,
   useMultiFileAuthState,
@@ -196,7 +197,6 @@ async function start() {
   const sock = makeWASocket({
     version,
     logger: pino({ level: 'silent' }),
-    printQRInTerminal: true,
     browser: ['Med Control Sender', 'Chrome', '1.0.0'],
     auth: {
       creds: state.creds,
@@ -210,7 +210,12 @@ async function start() {
 
   let running = false;
 
-  sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
+  sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+    if (qr) {
+      console.log('\nScan this QR in WhatsApp → Linked devices → Link a device:\n');
+      qrcode.generate(qr, { small: true });
+    }
+
     if (connection === 'open' && !running) {
       running = true;
       try {
