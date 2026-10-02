@@ -66,15 +66,27 @@ function cleanPhone(value) {
 }
 
 function parseTesters() {
-  if (!process.env.TESTERS_JSON) {
-    throw new Error('TESTERS_JSON is required. Keep tester phone numbers and activation codes out of GitHub.');
+  let raw = process.env.TESTERS_JSON;
+
+  if (!raw) {
+    const testersFile = process.env.TESTERS_FILE || './testers.json';
+    if (fs.existsSync(testersFile)) {
+      raw = fs.readFileSync(testersFile, 'utf8');
+      console.log(`Loaded tester configuration from ${testersFile}`);
+    }
+  }
+
+  if (!raw) {
+    throw new Error(
+      'Tester configuration missing. Create ./testers.json or set TESTERS_JSON in .env. Keep phone numbers and activation codes out of GitHub.'
+    );
   }
 
   let testers;
   try {
-    testers = JSON.parse(process.env.TESTERS_JSON);
+    testers = JSON.parse(raw);
   } catch {
-    throw new Error('TESTERS_JSON must be valid JSON.');
+    throw new Error('Tester configuration is not valid JSON.');
   }
 
   if (!Array.isArray(testers) || testers.length !== EXPECTED_PRIVATE_RECIPIENTS) {
