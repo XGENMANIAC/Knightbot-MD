@@ -30,3 +30,6 @@
 
 # Med one-shot sender state
 med-control-sent.json
+
+# Private Med tester configuration
+testers.json
